@@ -1,0 +1,149 @@
+import json, logging, time
+
+from qbaf import QBAFramework
+
+from mad.prompt_templates import *
+from mad.agents.Agent import Agent
+
+class Dialogue:
+    """
+    Allows instantiating dialogues that orchestrate MADs according to protocols.
+    """
+
+    def __init__(self, topics: list[str], agents: list[Agent], prompt: function, logger: logging.Logger, stop_condition: dict, sleep_time=1, semantics="DFQuAD_model"):
+        """Manages the MAD, i.e., turn-taking and argument strengths assessment.
+
+        Args:
+            topics (list[str]): List of topics agents engaging in the dialogue should debate.
+            agents (list[Agent]): List of Agents engaging in the dialogue.
+            prompt (function): Prompt function for natural language-based inference.
+            logger (logging.Logger): Logger, e.g., for debugging or command line output.
+            stop_condition (dict): Defines when the dialogue should stop (when topic strength converge, or after a number of iterations).
+            sleep_time (int, optional): Waiting time (in seconds) before prompts to avoid issues with API limits. Defaults to 1.
+            semantics (str, optional): Gradual semantics used for QBAF evaluation. Defaults to "DFQuAD_model".
+        """
+        self.topics = topics
+        self.topic_ids = [f'topic{index}' for index, _ in enumerate(topics)]
+        self.stop_condition = stop_condition
+        self.agents = agents
+        self.logger = logger
+        self.logger = logger
+        self.sleep_time = sleep_time
+        self.qbafs = []
+        self.prompt = prompt
+        self.textual_descriptions = {}
+        self.semantics = semantics
+        for index, topic in enumerate(topics):
+            self.textual_descriptions[f'topic{index}'] = topic
+        args = [] + self.topic_ids
+        initial_strengths = [0.5 for _ in args]
+        initial_qbaf = QBAFramework(args, initial_strengths, [], [], semantics=semantics)
+        self.qbafs.append(initial_qbaf)
+        self.qbaf_dicts = []
+        self.qbaf_dicts.append({
+            'arguments': args,
+            'initial_strengths': initial_strengths,
+            'attacks': [],
+            'supports': []
+        })
+
+    def update_qbaf(self, qbaf: dict, agent_update: str, iteration: int, pro: bool=True) -> dict:
+        """Updates a QBAF given an agent's update proposal.
+
+        Args:
+            qbaf (dict): Dictionary representing a QBAF with `arguments`, `initial_strengths`, `attacks`, and `supports`.
+            agent_update (str): String containing an agent's proposed QBAF update.
+            iteration (int): Current iteration of the dialogue.
+            pro (bool, optional): Whether or not the agent is arguing for or against a given topic. Defaults to `True`.
+
+        Returns:
+            dict: Dictionary representing a QBAF with `arguments`, `initial_strengths`, `attacks`, and `supports`.
+        """
+        args = qbaf['arguments']
+        initial_strengths = qbaf['initial_strengths']
+        atts = qbaf['attacks']
+        supps = qbaf['supports']
+        j_agent_update = json.loads(agent_update)
+
+        if 'arg' in j_agent_update:
+            arg = f'p{iteration}' if pro else f'c{iteration}'
+            textual_description = j_agent_update['arg']
+            self.textual_descriptions[arg] = textual_description
+            if 'target' in j_agent_update and 'type' in j_agent_update:
+                target = j_agent_update['target']
+                type = j_agent_update['type']
+                new_atts = []
+                new_supps = []
+                if target in args:
+                    if type == 'attack':
+                        atts.append((arg, target))
+                        new_atts.append((arg, target))
+                    else:
+                        supps.append((arg, target))
+                        new_supps.append((arg, target))
+                    args.append(arg)
+                    time.sleep(self.sleep_time)
+                    oracle_prompt = generate_oracle_prompt(textual_description, new_atts, new_supps)
+                    initial_strength_assessment = self.prompt(oracle_prompt)
+                    initial_strength = json.loads(initial_strength_assessment)
+                    self.logger.info(f'initial strength: {initial_strength}')
+                    initial_strengths.append(initial_strength['score'])
+        return {
+            'arguments': args,
+            'initial_strengths': initial_strengths,
+            'attacks': atts,
+            'supports': supps
+        }
+
+    def run_turn(self, iteration: int):
+        """Moves the dialogue forward by one turn.
+
+        Args:
+            iteration (int): Current iteration.
+        """
+        qbaf = self.qbafs[iteration]
+        time.sleep(self.sleep_time)
+        pro_agent = self.agents[0]
+        con_agent = self.agents[1]
+        pro_agent_update = pro_agent.take_turn(qbaf, self.textual_descriptions)
+        time.sleep(self.sleep_time)
+        con_agent_update = con_agent.take_turn(qbaf, self.textual_descriptions)
+        self.logger.info(f'Iteration: {iteration}')
+        self.logger.info(f'Pro: {pro_agent_update}')
+        self. logger.info(f'Con: {con_agent_update}')
+        qbaf_dict = self.qbaf_dicts[iteration]
+        qbaf_dict = self.update_qbaf(qbaf_dict, pro_agent_update, iteration)
+        qbaf_dict = self.update_qbaf(qbaf_dict, con_agent_update, iteration, False)
+        self.qbaf_dicts.append(qbaf_dict)
+        self.logger.info(qbaf_dict)
+        args = qbaf_dict['arguments']
+        initial_strengths = qbaf_dict['initial_strengths']
+        atts = qbaf_dict['attacks']
+        supps = qbaf_dict['supports']
+        qbaf = QBAFramework(args, initial_strengths, atts, supps, semantics=self.semantics)
+        self.qbafs.append(qbaf)
+        self.logger.info(f'Current topic strengths: {[qbaf.final_strength(topic) for topic in self.topic_ids]}')
+    
+    def run_dialogue(self):
+        """Runs the dialogue until the stop condition is reached.
+        """
+        if 'iterations' in self.stop_condition:
+            for i in range(self.stop_condition['iterations']):
+                self.run_turn(i)
+        if 'convergence' in self.stop_condition:
+            i = 0
+            delta_threshold = self.stop_condition['convergence']
+            window_size = 2
+            if 'window_size' in self.stop_condition:
+                window_size = self.stop_condition['window_size']
+            topic_strengths = []
+            max_deltas = []
+            while len(topic_strengths) < window_size or max(max_deltas) > delta_threshold:
+                self.run_turn(i)
+                convergence_window = self.qbafs[-window_size:]
+                max_deltas = []
+                for topic_id in self.topic_ids:
+                    topic_strengths = [qbaf.final_strength(topic_id) for qbaf in convergence_window]
+                    deltas =  [abs(topic_strength_1 - topic_strength_2) for topic_strength_1 in topic_strengths for topic_strength_2 in topic_strengths]
+                    max_deltas.append(max(deltas))
+                i += 1

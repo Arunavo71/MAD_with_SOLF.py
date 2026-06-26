@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["mad*"]
+
+[project]
+name = "mad"
+version = "0.0.1"
+description = "Multi-Agent Debates in Python, with Observability and Governance Capabilities."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Timotheus Kampik" },
+]
+
+dependencies = [
+  "litellm",
+  "QBAF-Py@git+https://github.com/TimKam/Quantitative-Bipolar-Argumentation"
+
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest"
+]
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "mad"
+]
