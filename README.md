@@ -7,6 +7,20 @@ Check out this repository and run ``pip install .`` or equivalent (e.g., for Con
 
 ## Running a Basic MAD
 
+Create an `.env` file in the `examples` folder.
+Specify variables as follows, for example:
+
+```python
+MISTRAL_API_KEY = "<your_mistral_key_here>"
+MODEL_PROVIDER = "mistral"
+MODEL = "mistral-medium-latest"
+LOG_LEVEL = "INFO"
+SEMANTICS = "DFQuAD_model"
+WAIT_FOR_RATELIMIT = 3
+```
+
+Then, run:
+
 ```
 python examples/basic_mad.py -t="Kermit the Frog should be the next president of the USA."
 ```
