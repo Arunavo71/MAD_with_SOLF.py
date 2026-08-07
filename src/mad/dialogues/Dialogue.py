@@ -44,17 +44,18 @@ class Dialogue:
             'arguments': args,
             'initial_strengths': initial_strengths,
             'attacks': [],
-            'supports': []
+            'supports': [],
+            'final_strengths': initial_strengths
         })
 
-    def update_qbaf(self, qbaf: dict, agent_update: str, iteration: int, pro: bool=True) -> dict:
+    def update_qbaf(self, qbaf: dict, agent_update: str, iteration: int, agentID: int) -> dict:
         """Updates a QBAF given an agent's update proposal.
 
         Args:
             qbaf (dict): Dictionary representing a QBAF with `arguments`, `initial_strengths`, `attacks`, and `supports`.
             agent_update (str): String containing an agent's proposed QBAF update.
             iteration (int): Current iteration of the dialogue.
-            pro (bool, optional): Whether or not the agent is arguing for or against a given topic. Defaults to `True`.
+            agentID (int): Identifier of the current agent.
 
         Returns:
             dict: Dictionary representing a QBAF with `arguments`, `initial_strengths`, `attacks`, and `supports`.
@@ -66,7 +67,7 @@ class Dialogue:
         j_agent_update = json.loads(agent_update)
 
         if 'arg' in j_agent_update:
-            arg = f'p{iteration}' if pro else f'c{iteration}'
+            arg = f'A{agentID};I:{iteration}'
             textual_description = j_agent_update['arg']
             self.textual_descriptions[arg] = textual_description
             if 'target' in j_agent_update and 'type' in j_agent_update:
@@ -88,11 +89,14 @@ class Dialogue:
                     initial_strength = json.loads(initial_strength_assessment)
                     self.logger.info(f'initial strength: {initial_strength}')
                     initial_strengths.append(initial_strength['score'])
+        qpy_qbaf = QBAFramework(args, initial_strengths, atts, supps, semantics=self.semantics)
+        final_strengths = [qpy_qbaf.final_strength(arg) for arg in args]
         return {
             'arguments': args,
             'initial_strengths': initial_strengths,
             'attacks': atts,
-            'supports': supps
+            'supports': supps,
+            'final_strengths': final_strengths
         }
 
     def run_turn(self, iteration: int):
@@ -101,19 +105,15 @@ class Dialogue:
         Args:
             iteration (int): Current iteration.
         """
-        qbaf = self.qbafs[iteration]
-        time.sleep(self.sleep_time)
-        pro_agent = self.agents[0]
-        con_agent = self.agents[1]
-        pro_agent_update = pro_agent.take_turn(qbaf, self.textual_descriptions)
-        time.sleep(self.sleep_time)
-        con_agent_update = con_agent.take_turn(qbaf, self.textual_descriptions)
-        self.logger.info(f'Iteration: {iteration}')
-        self.logger.info(f'Pro: {pro_agent_update}')
-        self. logger.info(f'Con: {con_agent_update}')
         qbaf_dict = self.qbaf_dicts[iteration]
-        qbaf_dict = self.update_qbaf(qbaf_dict, pro_agent_update, iteration)
-        qbaf_dict = self.update_qbaf(qbaf_dict, con_agent_update, iteration, False)
+        agent_updates = []
+        self.logger.info(f'Iteration: {iteration}')
+        for index, agent in enumerate(self.agents):
+            time.sleep(self.sleep_time)
+            agent_update = agent.take_turn(qbaf_dict, self.textual_descriptions, self.topic_ids)
+            agent_updates.append(agent_update)
+            self.logger.info(f'Agent {index}: {agent_update}')
+            qbaf_dict = self.update_qbaf(qbaf_dict, agent_update, iteration, index)
         self.qbaf_dicts.append(qbaf_dict)
         self.logger.info(qbaf_dict)
         args = qbaf_dict['arguments']
@@ -122,6 +122,7 @@ class Dialogue:
         supps = qbaf_dict['supports']
         qbaf = QBAFramework(args, initial_strengths, atts, supps, semantics=self.semantics)
         self.qbafs.append(qbaf)
+        self.logger.info(self.topic_ids)
         self.logger.info(f'Current topic strengths: {[qbaf.final_strength(topic) for topic in self.topic_ids]}')
     
     def run_dialogue(self):

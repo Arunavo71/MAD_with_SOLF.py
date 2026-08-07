@@ -1,10 +1,10 @@
 from qbaf import QBAFramework
 from mad.qbaf_utils import *
 
-def generate_debater_prompt(qbaf: QBAFramework, textual_descriptions: str, pro: bool=True):
+def generate_debater_prompt(qbaf: QBAFramework, textual_descriptions: str, pro: bool=True, topic='topic0'):
     return f'''
     You are an excellent and eloquent debater.
-    Argue {'for' if pro else 'against'} the following topic: {textual_descriptions['topic0']}.
+    Argue {'for' if pro else 'against'} the following topic: {textual_descriptions[topic]}.
     Your argument must be brief, not more than a short sentence.
     Do so by either attacking or supporting the following arguments:
     {[{'text': textual_descriptions[arg], 'id': arg} for arg in get_untargeted_args(qbaf)]}.

@@ -1,4 +1,4 @@
-import logging, os
+import ast, logging, os
 from argparse import ArgumentParser
 from dotenv import load_dotenv
 from litellm import completion
@@ -8,7 +8,7 @@ from mad.agents.Agent import Agent
 from mad.dialogues.Dialogue import Dialogue
 
 parser = ArgumentParser()
-parser.add_argument('-t', '--topic', help='Specifies the topic the agents should debate.')
+parser.add_argument('-t', '--topics', help='Specifies the topics the agents should debate.')
 args = parser.parse_args()
 load_dotenv()
 
@@ -30,8 +30,13 @@ def prompt(input_prompt: str):
         response_format={ "type": "json_object" })
     return response.choices[0].message.content
 
-
-pro_agent = Agent('pro', prompt, logger)
-con_agent = Agent('con', prompt, logger)
-dialogue = Dialogue([args.topic], [pro_agent, con_agent], prompt, logger, {'convergence': 0.01, 'window_size': 3})
+agents = []
+topics = ast.literal_eval(args.topics)
+for pro_topic in topics:
+    stances = {}
+    for index, topic in enumerate(topics):
+        stances[f'topic{index}'] = 'pro' if topic == pro_topic else 'con'
+    agents.append(Agent(stances, prompt, logger))
+# Run until convergence: dialogue = Dialogue(topics, agents, prompt, logger, {'convergence': 0.01, 'window_size': 3})
+dialogue = Dialogue(topics, agents, prompt, logger, {'iterations': 5})
 dialogue.run_dialogue()

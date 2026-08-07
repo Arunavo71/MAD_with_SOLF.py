@@ -1,6 +1,6 @@
 # MAD.py
 
-*Mad.py* is a Python library for running Multi-Agent Debates (MADs), with observability and governance capabilities.
+*Mad.py* is a prototypical Python library for running Multi-Agent Debates (MADs), with observability and governance capabilities.
 
 ## Installation
 Check out this repository and run ``pip install .`` or equivalent (e.g., for Conda).
@@ -19,15 +19,17 @@ SEMANTICS = "DFQuAD_model"
 WAIT_FOR_RATELIMIT = 3
 ```
 
-Then, run:
+Then, run, e.g.:
 
 ```
-python examples/basic_mad.py -t="Kermit the Frog should be the next president of the USA."
+python examples/basic_mad.py -t="['Kermit the Frog should be the next president of the USA.']"
 ```
 
-## Types of MAD
+Or:
 
-## MAD Governance and Observability
+```
+python examples/basic_mad.py -t="['Frodo should be the next president of the US.', 'Bilbo should be the next president of the US.']"
+```
 
 ## Testing
 Testing is done with [pytest](https://docs.pytest.org/en/stable/).
