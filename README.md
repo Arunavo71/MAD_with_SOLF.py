@@ -43,4 +43,4 @@ We welcome contributions, prepared with care and supported by tests.
 
 * Timotheus Kampik - [@TimKam](https://github.com/TimKam)
 
-* Filip Naudot - [@filipnaudot][https://github.com/filipnaudot]
+* Filip Naudot - [@filipnaudot](https://github.com/filipnaudot)
