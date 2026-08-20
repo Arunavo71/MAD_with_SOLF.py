@@ -1,6 +1,6 @@
 # MAD.py
 
-*Mad.py* is a prototypical Python library for running Multi-Agent Debates (MADs), with observability and governance capabilities.
+*Mad.py* is a prototypical Python library for running Multi-Agent Debates (MADs).
 
 ## Installation
 Check out this repository and run ``pip install .`` or equivalent (e.g., for Conda).
