@@ -2,12 +2,149 @@ import json, logging, time
 
 from qbaf import QBAFramework
 
+import matplotlib.pyplot as plt
+
 from mad.prompt_templates import *
 from mad.agents.Agent import Agent
+
+from qbaf_solf.fairness_notions import *
+from qbaf_solf.safety_oscillations_liveness import *
+
+qbaf_collection = []
+
+
+def calculate_threshold_excess(qbaf_collection: list[QBAFramework],
+                               topic_set: list[str],
+                               threshold: float) -> dict:
+
+    """
+      Calculates the threshold exceeding instances of the topic set.
+
+      Args:
+        qbaf_collection (list[QBAFramework]): The collection of QBAFs.
+        topic_set (list[str]): The considered set of arguments.
+        threshold (float): The credibility threshold.
+
+      Returns:
+        dict: returns the number of threshold exceeding instances.
+    """
+
+    instances_of_credibility = dict()
+
+    for topic_arg in topic_set:
+      instances_of_credibility.update({topic_arg: len([qbaf for qbaf in qbaf_collection if (qbaf.final_strengths[topic_arg] >= threshold)])})
+
+    return instances_of_credibility
+
+def solf_analysis(qbaf_coll: list[QBAFramework], topic_set: list[str], threshold: float) -> None:
+    """ Provides a SOL analysis of the updated QBAF
+        
+    Args: 
+        qbaf_collection (list[QBAFramework]): The updated list of QBAFramework.
+        topic_set (list[QBAFramework]): The topic set of the analysis.
+        threshold (float): The threshold w.r.t. which SOLF analysis is done.
+    """
+
+    print(f'The topic set is {topic_set}')
+    print(f'Is the topic set safe? {is_safe(qbaf_coll, topic_set, threshold)}')
+    print(f'Is the topic set live? {is_live(qbaf_coll, topic_set, threshold)}')
+    print(f'The osciallations shown across {threshold} by the topic set is {number_of_oscillations(qbaf_coll, topic_set, threshold)}')
+
+    return None
+
+def fairness_analysis(qbaf_coll: list[QBAFramework], topic_set: list[str], threshold: float) -> None:
+    """ Provides a SOL analysis of the updated QBAF
+            
+        Args: 
+            qbaf_collection (list[QBAFramework]): The updated list of QBAFramework.
+            topic_set (list[QBAFramework]): The topic set of the analysis.
+            threshold (float): The threshold w.r.t. which SOLF analysis is done.
+    """
+    
+    print(f'The topic set is {topic_set}')
+    print(f'Is the topic set ideally_safe? {is_ideal_fair(qbaf_coll, topic_set, threshold)}')
+    print(f'Is the topic set live? {is_live_fair(qbaf_coll, topic_set, threshold)}')
+    print(f'The osciallations shown across {threshold} by the topic set is {is_cautious_fair(qbaf_coll, topic_set, threshold)}')
+
+    print(f'The Gini fairness score of the topic set is {calculate_gini_fairness(qbaf_coll, topic_set, threshold)}')
+    print(f'The Shannon fairness score of the topic set is {calculate_shannon_fairness(qbaf_coll, topic_set, threshold)}')
+
+    return None
+
+
+def visualise_fairness_gini(topic_set: list[str],
+                        qbaf_collection: list[QBAFramework], 
+                        threshold: float) -> None:
+    """
+    Draws the area plot for Gini fairness.
+    
+    Args:
+        topic_set (list[str]): The topic set.
+        qbaf_collection (list[QBAFramework]): The dialogue considered
+        threshold (float): The credibility threshold.
+    
+    """
+
+    x_axis = range(len(topic_set)+1)
+    sorted_oscillations = sorted(calculate_threshold_excess(qbaf_collection, topic_set, threshold).items(), key=lambda item: item[1])
+    safety_curve = [0]
+    for x in sorted_oscillations:
+      safety_curve.append(safety_curve[-1] + int(x[1]))
+
+    # Calculating the fairness line
+    fairness_line = [(safety_curve[-1]/len(topic_set)) * x for x in x_axis]
+
+    plt.xlabel('Topic Arguments')
+    plt.ylabel('Credibility Attainment instances')
+    plt.xticks(x_axis, ['']+[x[0] for x in sorted_oscillations])
+    plt.plot(x_axis, safety_curve, c= 'red', marker='s')
+    plt.plot(x_axis, fairness_line, c= 'green', linestyle= 'dashed', marker= 'o')
+    plt.legend()
+    plt.fill_between(x_axis, safety_curve, fairness_line, alpha=0.4)
+
+    plt.show()
+
+    return None
+
+
+def visualise_fairness_shannon(topic_set: list[str],
+                        qbaf_collection: list[QBAFramework], 
+                        threshold: float) -> None:
+    """
+    Draws the probability plot for Shannon fairness.
+    
+    Args:
+        topic_set (list[str]): The topic set.
+        qbaf_collection (list[QBAFramework]): The dialogue considered
+        threshold (float): The credibility threshold.
+    
+    """
+    oscillations = calculate_threshold_excess(qbaf_collection, topic_set, threshold)
+    if all(oscillations[x] == 0 for x in oscillations.keys()):
+      return 1
+    sum_of_oscillations = sum([x[1] for x in oscillations.items()])
+    oscillation_probability = {x: oscillations[x]/sum_of_oscillations for x in oscillations.keys()}
+
+    topic_set = [x[0] for x in oscillation_probability]
+    prob_of_surprise = [x[1] for x in oscillation_probability]
+
+    bars = plt.bar(
+        topic_set,
+        prob_of_surprise,
+        color="skyblue",
+        edgecolor="black",
+        width=0.6)
+
+    plt.grid(axis="y", linestyle="--", alpha=0.5)
+    plt.show()
+
+    return None
+
 
 class Dialogue:
     """
     Allows instantiating dialogues that orchestrate MADs according to protocols.
+
     """
 
     def __init__(self, topics: list[str], agents: list[Agent], prompt: function, logger: logging.Logger, stop_condition: dict, sleep_time=1, semantics="DFQuAD_model"):
@@ -90,6 +227,10 @@ class Dialogue:
                     self.logger.info(f'initial strength: {initial_strength}')
                     initial_strengths.append(initial_strength['score'])
         qpy_qbaf = QBAFramework(args, initial_strengths, atts, supps, semantics=self.semantics)
+        qbaf_collection.append(qpy_qbaf)
+        topic_set = ['topic'+str(i) for i in range(0, len(self.topics))]
+        #print(f"The topic set is {topic_set}")
+        solf_analysis(qbaf_collection, topic_set, threshold=0.5)
         final_strengths = [qpy_qbaf.final_strength(arg) for arg in args]
         return {
             'arguments': args,
@@ -98,6 +239,7 @@ class Dialogue:
             'supports': supps,
             'final_strengths': final_strengths
         }
+
 
     def run_turn(self, iteration: int):
         """Moves the dialogue forward by one turn.
@@ -148,3 +290,9 @@ class Dialogue:
                     deltas =  [abs(topic_strength_1 - topic_strength_2) for topic_strength_1 in topic_strengths for topic_strength_2 in topic_strengths]
                     max_deltas.append(max(deltas))
                 i += 1
+
+        topic_set = ['topic'+str(i) for i in range(0, len(self.topics))]    
+        fairness_analysis(topic_set=topic_set, qbaf_coll=qbaf_collection, threshold=0.5)
+
+        visualise_fairness_gini(topic_set=topic_set, qbaf_collection=qbaf_collection, threshold=0.5)
+        visualise_fairness_shannon(topic_set=topic_set, qbaf_collection=qbaf_collection, threshold=0.5)
