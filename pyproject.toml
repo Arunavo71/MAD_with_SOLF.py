@@ -18,7 +18,7 @@ authors = [
 
 dependencies = [
   "litellm",
-  "QBAF-Py@git+https://github.com/TimKam/Quantitative-Bipolar-Argumentation",
+  "QBAF-Py@git+https://github.com/TimKam/Quantitative-Bipolar-Argumentation@solf",
   "matplotlib"
 
 ]
